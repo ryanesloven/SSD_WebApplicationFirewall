@@ -3,11 +3,12 @@ from dotenv import load_dotenv, find_dotenv
 from flask import Flask
 from WebsiteFiles import pages, posts, database
 
-load_dotenv('website.env')
+load_dotenv('WebsiteFiles.env')
 
 def create_app():
     app = Flask(__name__)
-    app.config.from_prefixed_env()
+    app.config.from_prefixed_env('WebsiteFiles.env')
+
     database.init_app(app)
     
     app.register_blueprint(pages.bp)
