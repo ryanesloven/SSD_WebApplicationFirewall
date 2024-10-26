@@ -7,7 +7,7 @@ from flask import (
     abort,
     request)
 import re
-from WebsiteFiles.database import get_db
+from database import get_db
 
 bp = Blueprint("posts", __name__)
 
