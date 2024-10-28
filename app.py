@@ -1,129 +1,115 @@
 import os
-import re
 from dotenv import load_dotenv, find_dotenv
-from flask import Flask, request, abort
+from flask import Flask, request, abort, flash, redirect, url_for, render_template, get_flashed_messages
 import flask_login
-import flask
-from database import get_db
-import pages, posts, database, auth
+import datetime
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, SubmitField
+from wtforms.validators import DataRequired, Email, EqualTo
+from werkzeug.security import generate_password_hash, check_password_hash
+import pages
 from flask_login import UserMixin,login_user, LoginManager, login_required, logout_user, current_user
-
-
-
-load_dotenv('WebsiteFiles.env')
-
-class User():
-    pass
+from sqlalchemy import create_engine, TIMESTAMP
+from flask_sqlalchemy import SQLAlchemy
 
 def create_app():
     app = Flask(__name__)
     app.config.from_prefixed_env('WebsiteFiles.env')
-
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///webDatabase.db'
     app.config['SECRET_KEY'] = 'flaskisfun'
-    database.init_app(app)
 
-    login_manager = LoginManager()
-    login_manager.init_app(app)
-    login_manager.login_view = 'login'
-    
-    ##app.register_blueprint(auth.bp)
     app.register_blueprint(pages.bp)
-    app.register_blueprint(posts.bp)
     print(f"Current Environment: {os.getenv('ENVIRONMENT')}")
     print(f"Using Database: {app.config.get('DATABASE')}")
     return app
 
 app = create_app()
-
-# Define a set of rules to filter out malicious requests
-rules = {
-    'sql_injection': re.compile(r'(union|select|insert|delete|update|drop|alter).*', re.IGNORECASE),
-    'xss_attack': re.compile(r'(<script>|<iframe>).*', re.IGNORECASE),
-    'path_traversal': re.compile(r'(\.\./|\.\.).*', re.IGNORECASE)
-}
-
-# Middleware to check each request against WAF rules
-"""
-@app.before_request
-def check_request_for_attacks():
-    for attack_type, pattern in rules.items():
-        # If any of the rules match, we block the request
-        if pattern.search(request.path) or pattern.search(request.query_string.decode()):
-            abort(403, description=f'Request blocked by WAF: Detected {attack_type}')
-"""
+db = SQLAlchemy(app)
 
 ##code for login features
-class User(flask_login.UserMixin):
-    def __init__(self, id, username, password):
-        self.id = id
-        self.username = username
-        self.password = password
-        self.authenticated = False    
-    def is_active(self):
-        return self.is_active()    
-    def is_anonymous(self):
-        return False    
-    def is_authenticated(self):
-        return self.authenticated    
-    def is_active(self):
-        return True    
-    def get_id(self):
-        return self.id
+class Posts(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    author = db.Column(db.String(100), nullable=False)
+    message = db.Column(db.String(500), nullable=False)
+    created = db.Column(TIMESTAMP, default=datetime.datetime.now)
+
+class SignupForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired()])
+    password = PasswordField('Password', validators=[DataRequired()])
+    confirm_password = PasswordField('Confirm Password', validators=[DataRequired(), EqualTo('password')])
+    submit = SubmitField('Sign Up')
+
+class Users(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(100), nullable=False, unique=True)
+    password = db.Column(db.String(100), nullable=False)
+
+##sets up database
+with app.app_context():
+    db.create_all()
 
 login_manager = LoginManager()
 login_manager.init_app(app)
 
 @login_manager.user_loader
-def user_loader(username, _password):
-    db = get_db()
-    validUser = db.execute("SELECT COUNT(1) FROM userLogin WHERE (username) ==  username AND (_password) == password", (username, _password),)
-    if (validUser != 1):
-        return
-    
-    user = User()
-    user.id = username
-    return user
-
-@login_manager.request_loader
-def reqest_loader(request):
-    db = get_db()
-    username = request.form.get('username')
-    password = request.form.get('password')
-    validUser = db.execute("SELECT COUNT(1) FROM userLogin WHERE (username, _password) == (?, ?)", (username, password),)
-    if (validUser != 1):
-        return
-    
-    user = User()
-    user.id = username
-    return user
+def user_loader(user_id):
+    return Users.query.get(user_id)
 
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    db = get_db()
-    if flask.request.method == 'GET':
-        return '''
-               <form action='login' method='POST'>
-                <input type='text' name='email' id='email' placeholder='email'/>
-                <input type='password' name='password' id='password' placeholder='password'/>
-                <input type='submit' name='submit'/>
-               </form>
-               '''
-    username = flask.request.form['username']
-    password = flask.request.form['password']
+    if request.method == "POST":
+        user = Users.query.filter_by(username=request.form.get("username")).first()
+        if user is not None and user.password == request.form.get("password"):
+            login_user(user)
+            return redirect(url_for("pages.home"))
+        else:
+            flash("Invalid login information, please try again.")
+    return render_template("pages/login.html")
+    
 
-    validUser = db.execute("SELECT COUNT(1) FROM userLogin WHERE (username, _password) == (?, ?)", (username, password),)
-    if (validUser == 1):
-        user = User()
-        user.id = username
-        flask_login.login_user(user)
-        return flask.redirect(flask.url_for('protected'))
-    return 'Bad Login'
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    form = SignupForm()
+    if request.method == "POST":
+        user = Users.query.filter_by(username=request.form.get("username")).first()
+        if user is not None:
+            flash('This username is already associated with an account.')
+        else:
+            user = Users(username=request.form.get("username"), password=request.form.get("password"))
+            db.session.add(user)
+            db.session.commit()
+            flash('Successfully signed up! You can now log in.')
+            get_flashed_messages(with_categories=True)
+            return redirect(url_for('login'))
+
+    return render_template("pages/signup.html", form=form)
 
 @app.route('/logout')
 def logout():
     flask_login.logout_user()
     return "Logged Out"
+
+@app.route('/protected')
+@flask_login.login_required
+def protected():
+    return 'Logged in as: ' + flask_login.current_user.id
+
+@app.route("/create", methods=("GET", "POST"))
+def create():
+    if request.method == "POST":
+        flash("Your Name: "+current_user.username)
+        post = Posts(author=current_user.username, message=request.form.get("message"))
+        db.session.add(post)
+        db.session.commit()
+        get_flashed_messages(with_categories=True)
+        return redirect(url_for("posts"))
+    return render_template("posts/create.html")
+
+@app.route("/posts")
+def posts():
+    posts = Posts.query.all()
+    return render_template("posts/posts.html", posts=posts)
 
 # Start the web application on port 5000
 if __name__ == '__main__':

@@ -1,4 +1,8 @@
-from flask import Blueprint, render_template, abort, request
+from flask import Blueprint, render_template, abort, request, redirect, flash, url_for
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, SubmitField
+from wtforms.validators import DataRequired, Email, EqualTo
+from werkzeug.security import generate_password_hash, check_password_hash
 import re
 
 bp = Blueprint("pages", __name__)
@@ -24,3 +28,4 @@ def home():
 @bp.route("/about")
 def about():
     return render_template("pages/about.html")
+

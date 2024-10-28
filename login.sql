@@ -1,7 +1,0 @@
-DROP TABLE IF EXISTS userLogin;
-
-CREATE TABLE userLogin (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT NOT NULL,
-  _password TEXT NOT NULL
-);
