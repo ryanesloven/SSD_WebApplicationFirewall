@@ -1,4 +1,5 @@
 import os
+import re
 from dotenv import load_dotenv, find_dotenv
 from flask import Flask, request, abort, flash, redirect, url_for, render_template, get_flashed_messages
 import flask_login
@@ -25,13 +26,17 @@ def create_app():
 
 app = create_app()
 db = SQLAlchemy(app)
-
+rules = {
+    'sql_injection': re.compile(r'(union|select|insert|delete|update|drop|alter|table).*', re.IGNORECASE),
+    'xss_attack': re.compile(r'(<script>|<iframe>|</script>|javascript:).*', re.IGNORECASE),
+}
 ##Web Application Firewall
 @app.before_request
 def Firewall():
-    ##handles attacks using the URL
-    ##other methods of attack need to be handled where they occur
-    pass
+    for attack_type, pattern in rules.items():
+        # If any of the rules match, block request
+        if pattern.search(request.path) or pattern.search(request.query_string.decode()):
+            abort(403, description=f'Request Block due to detected Attack')
 
 ##code for login features
 class Posts(db.Model):
