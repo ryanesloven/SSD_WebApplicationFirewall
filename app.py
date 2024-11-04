@@ -26,6 +26,13 @@ def create_app():
 app = create_app()
 db = SQLAlchemy(app)
 
+##Web Application Firewall
+@app.before_request
+def Firewall():
+    ##handles attacks using the URL
+    ##other methods of attack need to be handled where they occur
+    pass
+
 ##code for login features
 class Posts(db.Model):
     id = db.Column(db.Integer, primary_key=True)
